@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AppHeader from "@/components/app-header";
 import "@/app/community.css";
-import { getOrCreateNickname } from "@/lib/nickname";
+import { refreshNickname } from "@/lib/nickname";
 import {
   formatTime,
   toDisplayMessage,
@@ -68,10 +68,22 @@ export default function CommunityPage() {
     []
   );
 
-  const scrollToBottom = useCallback(() => {
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
     const feed = feedRef.current;
-    if (feed) feed.scrollTop = feed.scrollHeight;
+    if (!feed) return;
+    feed.scrollTo({ top: feed.scrollHeight, behavior });
   }, []);
+
+  useEffect(() => {
+    if (loading || messages.length === 0) return;
+
+    const id = requestAnimationFrame(() => {
+      scrollToBottom();
+      requestAnimationFrame(() => scrollToBottom());
+    });
+
+    return () => cancelAnimationFrame(id);
+  }, [loading, messages, scrollToBottom]);
 
   const mapRows = useCallback((rows: Message[]) => {
     return rows.map((row) => toDisplayMessage(row, nicknameRef.current));
@@ -87,7 +99,7 @@ export default function CommunityPage() {
     }
 
     const client = supabase;
-    nicknameRef.current = getOrCreateNickname();
+    nicknameRef.current = refreshNickname();
 
     async function loadMessages() {
       setLoading(true);
@@ -106,7 +118,6 @@ export default function CommunityPage() {
 
       setMessages(mapRows(data ?? []));
       setLoading(false);
-      requestAnimationFrame(scrollToBottom);
     }
 
     loadMessages();
@@ -122,7 +133,7 @@ export default function CommunityPage() {
             if (prev.some((m) => m.id === row.id)) return prev;
             return [...prev, toDisplayMessage(row, nicknameRef.current)];
           });
-          requestAnimationFrame(scrollToBottom);
+          requestAnimationFrame(() => scrollToBottom("smooth"));
         }
       )
       .subscribe();
